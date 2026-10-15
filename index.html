@@ -12,11 +12,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MacroPulse">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23090d16' stroke='%2338bdf8' stroke-width='4'/%3E%3Cpath d='M20 52 h18 l8 -24 l12 44 l10 -30 l8 16 h14' fill='none' stroke='%2338bdf8' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23090d16'/%3E%3Cpath d='M30 92 h30 l15 -42 l22 78 l18 -54 l14 28 h25' fill='none' stroke='%2338bdf8' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-
-  <!-- Inline Web App Manifest Data-URI -->
-  <link rel="manifest" href="data:application/manifest+json;utf-8,%7B%22name%22%3A%22MacroPulse%20Daily%20Meal%20%26%20Macro%20Calculator%22%2C%22short_name%22%3A%22MacroPulse%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23090d16%22%2C%22theme_color%22%3A%22%23090d16%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20512%20512%27%253E%253Crect%20width%3D%27512%27%20height%3D%27512%27%20rx%3D%27128%27%20fill%3D%27%2523090d16%27%2F%253E%253Cpath%20d%3D%27M80%20260h80l40-120%2060%20220%2050-160%2035%2080h87%27%20fill%3D%27none%27%20stroke%3D%27%252338bdf8%27%20stroke-width%3D%2730%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%2F%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.json">
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -109,6 +107,18 @@
           </svg>
           <span class="hidden sm:inline">Targets</span>
         </button>
+
+        <!-- Install App Button (Auto-shown when browser detects PWA installability) -->
+        <button id="pwaInstallBtn" onclick="installMacroPulseApp()" class="hidden items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-emerald-500/20 to-brand-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all shadow-sm">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span class="hidden xs:inline">Install</span> App
+        </button>
+
+        <!-- Quick Link to David's Health Board -->
+        <a href="https://davelane26.github.io/weight-dashboard-v2/" target="_blank" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-all" title="Open Health Dashboard">
+          <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <span>Health Board ↗</span>
+        </a>
 
         <!-- Data & Export Menu Button -->
         <button onclick="openModal('exportModal')" class="p-1.5 rounded-lg text-slate-300 hover:text-white bg-slate-900 border border-slate-800 hover:bg-slate-800 transition-all" title="Export & Backup">
@@ -2294,6 +2304,44 @@
         toast.classList.add('translate-y-3', 'opacity-0');
         setTimeout(() => toast.remove(), 300);
       }, 2800);
+    }
+
+    // --- PWA SERVICE WORKER & APP INSTALL PROMPT ---
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const installBtn = document.getElementById('pwaInstallBtn');
+      if (installBtn) {
+        installBtn.classList.remove('hidden');
+        installBtn.classList.add('flex');
+      }
+    });
+
+    function installMacroPulseApp() {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          showToast('MacroPulse installed as app!');
+        }
+        deferredInstallPrompt = null;
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) {
+          installBtn.classList.add('hidden');
+          installBtn.classList.remove('flex');
+        }
+      });
+    }
+
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').then((reg) => {
+          console.log('MacroPulse Service Worker registered successfully:', reg.scope);
+        }).catch((err) => {
+          console.warn('MacroPulse Service Worker registration failed:', err);
+        });
+      });
     }
   </script>
 </body>
