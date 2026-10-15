@@ -1,17 +1,16 @@
 /* ════════════════════════════════════════════════════════════════════
-   sw.js — MacroPulse PWA Service Worker
-   Strategy:
-     • Network-first for HTML (always get fresh version on reload, fallback to cache offline)
-     • Cache app shell assets (icon.svg, manifest.json)
-     • Immediate activation on install
+   sw.js — MacroPulse PWA Service Worker (v1.1)
    ════════════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'macropulse-v1.0';
+const CACHE_NAME = 'macropulse-v1.1';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg'
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {
