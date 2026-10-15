@@ -1,8 +1,8 @@
 /* ════════════════════════════════════════════════════════════════════
-   sw.js — MacroPulse PWA Service Worker (v1.3)
+   sw.js — MacroPulse PWA Service Worker (v1.4)
    ════════════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'macropulse-v1.3';
+const CACHE_NAME = 'macropulse-v1.4';
 const SHELL_ASSETS = [
   './',
   './index.html',
