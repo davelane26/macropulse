@@ -988,8 +988,10 @@
       }
     }
 
-    function saveState(skipCloudDebounce = false) {
-      appState.lastUpdated = Date.now();
+    function saveState(skipCloudDebounce = false, preserveTimestamp = false) {
+      if (!preserveTimestamp) {
+        appState.lastUpdated = Date.now();
+      }
       try {
         localStorage.setItem('macropulse_data', JSON.stringify(appState));
       } catch (e) {
@@ -1772,10 +1774,30 @@
       initSyncManager();
     });
 
+    // Immediate push if user closes app, switches tabs, or locks phone
+    function flushPendingSync() {
+      if (syncDebounceTimer) {
+        clearTimeout(syncDebounceTimer);
+        syncDebounceTimer = null;
+        if (appState.syncConfig.provider === 'gist') {
+          executeGistPush().catch(() => {});
+        } else if (appState.syncConfig.provider === 'firebase') {
+          executeFirebasePush().catch(() => {});
+        }
+      }
+    }
+
+    window.addEventListener('pagehide', flushPendingSync);
+    window.addEventListener('beforeunload', flushPendingSync);
+
     // Auto-pull immediately when unlocking phone or switching back into the app
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
-        executeGistPull(true, false);
+      if (document.visibilityState === 'hidden') {
+        flushPendingSync();
+      } else if (document.visibilityState === 'visible') {
+        if (appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
+          executeGistPull(true, false);
+        }
       }
     });
 
@@ -1832,13 +1854,13 @@
             await executeFirebasePush();
           }
           appState.syncConfig.lastSyncTimestamp = Date.now();
-          saveState(true);
+          saveState(true, true);
           updateSyncStatusUI('synced');
         } catch (err) {
           console.error('Debounced Cloud Sync error:', err);
           updateSyncStatusUI('error', err.message);
         }
-      }, 1500);
+      }, 400);
     }
 
     // PROVIDER 1: GITHUB GIST SYNC
@@ -1934,20 +1956,27 @@
         }
 
         const remoteState = JSON.parse(file.content);
-        const hasLocalMeals = Object.values(appState.logsByDate || {}).some(day => 
-          Object.values(day || {}).some(slot => Array.isArray(slot) && slot.length > 0)
-        );
+        const remoteLogsJson = JSON.stringify(remoteState.logsByDate || {});
+        const localLogsJson = JSON.stringify(appState.logsByDate || {});
+        const remoteTargetsJson = JSON.stringify(remoteState.targets || {});
+        const localTargetsJson = JSON.stringify(appState.targets || {});
+        const remoteCustomJson = JSON.stringify(remoteState.customFoods || []);
+        const localCustomJson = JSON.stringify(appState.customFoods || []);
 
-        if (remoteState && (force || !hasLocalMeals || !appState.lastUpdated || (remoteState.lastUpdated && remoteState.lastUpdated >= appState.lastUpdated))) {
+        const hasChanges = (remoteLogsJson !== localLogsJson) || 
+                            (remoteTargetsJson !== localTargetsJson) || 
+                            (remoteCustomJson !== localCustomJson);
+
+        if (remoteState && (hasChanges || force)) {
           appState.targets = remoteState.targets || appState.targets;
           appState.customFoods = remoteState.customFoods || [];
           appState.logsByDate = remoteState.logsByDate || {};
           appState.lastUpdated = remoteState.lastUpdated || Date.now();
           appState.syncConfig.lastSyncTimestamp = Date.now();
-          saveState(true);
+          saveState(true, true);
           renderAll();
           updateSyncStatusUI('synced');
-          if (!silent) showToast('Successfully pulled latest state from Gist ✓');
+          if (!silent) showToast('Synced latest meals from Cloud ✓');
         } else {
           updateSyncStatusUI('synced');
           if (!silent) showToast('Local state is already up to date');
