@@ -91,15 +91,22 @@
       <!-- Sync Status & Action Bar -->
       <div class="flex items-center gap-2 sm:gap-3">
         
-        <!-- Live Cloud Sync Pill -->
-        <button id="syncStatusPill" onclick="openModal('syncModal')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-700/80 bg-slate-900/80 hover:bg-slate-800/80 transition-all cursor-pointer group">
-          <span id="syncStatusDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
-          <span id="syncStatusText" class="text-slate-300">Local Only</span>
-          <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition-transform group-hover:rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-        </button>
+        <!-- Live Cloud Sync Pill & Quick Pull -->
+        <div class="flex items-center gap-1">
+          <button id="syncStatusPill" onclick="openModal('syncModal')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-700/80 bg-slate-900/80 hover:bg-slate-800/80 transition-all cursor-pointer group">
+            <span id="syncStatusDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+            <span id="syncStatusText" class="text-slate-300">Local Only</span>
+            <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition-transform group-hover:rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </button>
+          <button id="quickPullBtn" onclick="triggerQuickSync(event)" class="p-1.5 rounded-lg text-slate-400 hover:text-brand-300 bg-slate-900/80 border border-slate-700/80 hover:bg-slate-800/80 transition-all cursor-pointer" title="Sync now from cloud">
+            <svg id="quickPullSvg" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+        </div>
 
         <!-- Edit Targets Button -->
         <button onclick="openModal('targetsModal')" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/30 hover:bg-brand-500/20 transition-all">
@@ -1782,12 +1789,37 @@
         if (document.visibilityState === 'visible' && appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
           executeGistPull(true, false);
         }
-      }, 15000);
+      }, 10000);
     }
 
     window.addEventListener('hashchange', () => {
       initSyncManager();
     });
+
+    // Auto-pull immediately when focusing window or switching back to tab
+    window.addEventListener('focus', () => {
+      if (appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
+        executeGistPull(true, false);
+      }
+    });
+
+    // 1-Click Quick Sync Button in header
+    async function triggerQuickSync(e) {
+      if (e) e.stopPropagation();
+      const svg = document.getElementById('quickPullSvg');
+      if (svg) svg.classList.add('animate-spin');
+      try {
+        if (appState.syncConfig.provider === 'gist') {
+          await executeGistPull(false, true);
+        } else if (appState.syncConfig.provider === 'firebase') {
+          await executeFirebasePull(false);
+        } else {
+          showToast('Local Only. Tap sync pill to connect cloud.');
+        }
+      } finally {
+        if (svg) svg.classList.remove('animate-spin');
+      }
+    }
 
     // Immediate push if user closes app, switches tabs, or locks phone
     function flushPendingSync() {
