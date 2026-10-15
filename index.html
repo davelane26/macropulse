@@ -675,6 +675,20 @@
             Push to Cloud
           </button>
         </div>
+
+        <!-- Phone Quick Sync Section -->
+        <div id="gistPhoneSyncSection" class="hidden flex flex-col gap-2 p-3 bg-slate-900/90 border border-slate-700/80 rounded-xl mt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>📱</span> Connect Phone in 1 Click
+            </span>
+            <button type="button" onclick="copyPhoneSyncLink()" class="text-[11px] text-brand-400 hover:underline font-semibold">Copy Link</button>
+          </div>
+          <p class="text-[11px] text-slate-400">Scan this QR code with your phone camera to instantly connect and sync your meals without re-typing tokens:</p>
+          <div class="flex items-center justify-center py-2 bg-white rounded-lg p-2 max-w-[170px] mx-auto shadow-md">
+            <img id="gistQrCodeImg" src="" alt="Scan to connect phone" class="w-36 h-36">
+          </div>
+        </div>
       </div>
 
       <!-- Firebase Realtime Database View -->
@@ -1708,6 +1722,28 @@
 
     // --- DUAL CLOUD SYNC ENGINE (GitHub Gist + Firebase RTDB) ---
     function initSyncManager() {
+      // Check for 1-click Phone Sync via URL Hash (#sync_token=...&gist_id=...)
+      if (window.location.hash && window.location.hash.includes('sync_token=')) {
+        try {
+          const hashStr = window.location.hash.substring(1);
+          const params = new URLSearchParams(hashStr);
+          const token = params.get('sync_token');
+          const gistId = params.get('gist_id');
+          if (token && gistId) {
+            appState.syncConfig.provider = 'gist';
+            appState.syncConfig.gistToken = token;
+            appState.syncConfig.gistId = gistId;
+            saveState(true);
+            window.history.replaceState(null, '', window.location.pathname);
+            showToast('Cloud Sync paired to Phone! Pulling meals...');
+            manualSyncGist('pull', false);
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to parse sync hash:', err);
+        }
+      }
+
       updateSyncStatusUI('idle');
       
       // Auto pull on app boot if provider configured
@@ -2071,11 +2107,41 @@
     function updateGistLinkUI(gistId) {
       const container = document.getElementById('gistLinkDisplay');
       const link = document.getElementById('gistUrlLink');
+      const qrSection = document.getElementById('gistPhoneSyncSection');
+      const qrImg = document.getElementById('gistQrCodeImg');
+      const token = (appState.syncConfig && appState.syncConfig.gistToken) || document.getElementById('gistTokenInput').value.trim();
+
       if (gistId) {
         link.href = `https://gist.github.com/${gistId}`;
         container.classList.remove('hidden');
+
+        if (token && qrSection && qrImg) {
+          const syncUrl = `https://davelane26.github.io/macropulse/#sync_token=${encodeURIComponent(token)}&gist_id=${encodeURIComponent(gistId)}`;
+          qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(syncUrl)}`;
+          qrSection.classList.remove('hidden');
+        }
       } else {
         container.classList.add('hidden');
+        if (qrSection) qrSection.classList.add('hidden');
+      }
+    }
+
+    function copyPhoneSyncLink() {
+      const token = (appState.syncConfig && appState.syncConfig.gistToken) || document.getElementById('gistTokenInput').value.trim();
+      const gistId = (appState.syncConfig && appState.syncConfig.gistId) || document.getElementById('gistIdInput').value.trim();
+      if (!token || !gistId) {
+        alert('Please save your Gist connection first to generate the sync link.');
+        return;
+      }
+      const syncUrl = `https://davelane26.github.io/macropulse/#sync_token=${encodeURIComponent(token)}&gist_id=${encodeURIComponent(gistId)}`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(syncUrl).then(() => {
+          showToast('Copied Phone Sync link! Send/open on your phone.');
+        }).catch(() => {
+          prompt('Copy this sync link to your phone:', syncUrl);
+        });
+      } else {
+        prompt('Copy this sync link to your phone:', syncUrl);
       }
     }
 
