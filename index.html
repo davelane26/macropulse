@@ -1753,13 +1753,26 @@
         manualSyncFirebase('pull', true);
         connectFirebaseSSE();
       }
+
+      // Auto-poll in background every 15s while screen/tab is open
+      startBackgroundSync();
+    }
+
+    let backgroundSyncTimer = null;
+    function startBackgroundSync() {
+      if (backgroundSyncTimer) clearInterval(backgroundSyncTimer);
+      backgroundSyncTimer = setInterval(() => {
+        if (document.visibilityState === 'visible' && appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
+          executeGistPull(true, false);
+        }
+      }, 15000);
     }
 
     window.addEventListener('hashchange', () => {
       initSyncManager();
     });
 
-    // Auto-pull when switching back into the app on phone
+    // Auto-pull immediately when unlocking phone or switching back into the app
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
         executeGistPull(true, false);
