@@ -656,11 +656,27 @@
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Gist ID (Optional)</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Gist ID (Cloud Storage Key)</label>
           <input type="text" id="gistIdInput" placeholder="Leave blank to automatically create a new Secret Gist" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-brand-500">
+          
+          <div id="gistIdCallout" class="mt-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+            <div class="min-w-0 flex-1">
+              <span class="text-[10px] text-slate-400 uppercase font-semibold block">Connected Gist ID:</span>
+              <span id="activeGistIdDisplay" class="font-mono text-brand-300 font-bold truncate block select-all">Not connected yet</span>
+            </div>
+            <button type="button" onclick="copyGistIdOnly()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 shrink-0 ml-2 transition-all">
+              Copy ID
+            </button>
+          </div>
+
+          <p class="text-[11px] text-amber-300/90 mt-1.5 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span><strong>Device Check:</strong> Both PC and Phone <em>must have the exact same Gist ID</em> to sync.</span>
+          </p>
+
           <div id="gistLinkDisplay" class="mt-1 hidden">
             <a id="gistUrlLink" href="#" target="_blank" class="text-xs text-brand-400 hover:underline flex items-center gap-1 font-mono">
-              View Gist on GitHub ↗
+              View Gist Raw File on GitHub ↗
             </a>
           </div>
         </div>
@@ -1724,25 +1740,24 @@
 
     // --- DUAL CLOUD SYNC ENGINE (GitHub Gist + Firebase RTDB) ---
     function initSyncManager() {
-      // Check for 1-click Phone Sync via URL Hash (#sync_token=...&gist_id=...)
-      if (window.location.hash && window.location.hash.includes('sync_token=')) {
+      // Check for 1-click Phone Sync via URL Query or Hash (?sync_token=...&gist_id=... or #sync_token=...)
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash ? window.location.hash.substring(1) : '');
+      const token = searchParams.get('sync_token') || hashParams.get('sync_token');
+      const gistId = searchParams.get('gist_id') || hashParams.get('gist_id');
+
+      if (token && gistId) {
         try {
-          const hashStr = window.location.hash.substring(1);
-          const params = new URLSearchParams(hashStr);
-          const token = params.get('sync_token');
-          const gistId = params.get('gist_id');
-          if (token && gistId) {
-            appState.syncConfig.provider = 'gist';
-            appState.syncConfig.gistToken = token;
-            appState.syncConfig.gistId = gistId;
-            saveState(true);
-            window.history.replaceState(null, '', window.location.pathname);
-            showToast('Cloud Sync paired to Phone! Pulling meals...');
-            manualSyncGist('pull', false);
-            return;
-          }
+          appState.syncConfig.provider = 'gist';
+          appState.syncConfig.gistToken = token;
+          appState.syncConfig.gistId = gistId;
+          saveState(true);
+          window.history.replaceState(null, '', window.location.pathname);
+          showToast('Cloud Sync paired to Phone! Pulling meals...');
+          manualSyncGist('pull', false);
+          return;
         } catch (err) {
-          console.error('Failed to parse sync hash:', err);
+          console.error('Failed to parse sync parameters:', err);
         }
       }
 
@@ -1806,6 +1821,8 @@
       const dot = document.getElementById('syncStatusDot');
       const text = document.getElementById('syncStatusText');
       const provider = appState.syncConfig.provider;
+      const gistId = (appState.syncConfig && appState.syncConfig.gistId) || '';
+      const shortGist = gistId ? gistId.slice(-4) : '';
 
       pill.className = "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer group";
 
@@ -1822,7 +1839,7 @@
       } else if (status === 'synced') {
         pill.classList.add('border-emerald-500/40', 'bg-emerald-500/10', 'hover:bg-emerald-500/20');
         dot.className = "w-2 h-2 rounded-full bg-emerald-400";
-        text.textContent = provider === 'gist' ? 'Gist Synced ✓' : 'Firebase Live ✓';
+        text.textContent = provider === 'gist' ? (shortGist ? `Gist (..${shortGist}) ✓` : 'Gist Synced ✓') : 'Firebase Live ✓';
         text.className = "text-emerald-300";
       } else if (status === 'error') {
         pill.classList.add('border-rose-500/40', 'bg-rose-500/10', 'hover:bg-rose-500/20');
@@ -1910,6 +1927,7 @@
         // Update existing Gist via PATCH
         const res = await fetch(`https://api.github.com/gists/${gistId}`, {
           method: 'PATCH',
+          cache: 'no-store',
           headers: {
             'Accept': 'application/vnd.github+json',
             'Authorization': `Bearer ${gistToken}`,
@@ -1937,11 +1955,14 @@
       updateSyncStatusUI('syncing');
 
       try {
-        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        const res = await fetch(`https://api.github.com/gists/${gistId}?_t=${Date.now()}`, {
+          cache: 'no-store',
           headers: {
             'Accept': 'application/vnd.github+json',
             'Authorization': `Bearer ${gistToken}`,
-            'X-GitHub-Api-Version': '2022-11-28'
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
           }
         });
 
@@ -2175,7 +2196,12 @@
       const link = document.getElementById('gistUrlLink');
       const qrSection = document.getElementById('gistPhoneSyncSection');
       const qrImg = document.getElementById('gistQrCodeImg');
+      const activeDisplay = document.getElementById('activeGistIdDisplay');
       const token = (appState.syncConfig && appState.syncConfig.gistToken) || document.getElementById('gistTokenInput').value.trim();
+
+      if (activeDisplay) {
+        activeDisplay.textContent = gistId || '(Not connected yet)';
+      }
 
       if (gistId) {
         link.href = `https://gist.github.com/${gistId}`;
@@ -2189,6 +2215,23 @@
       } else {
         container.classList.add('hidden');
         if (qrSection) qrSection.classList.add('hidden');
+      }
+    }
+
+    function copyGistIdOnly() {
+      const gistId = (appState.syncConfig && appState.syncConfig.gistId) || document.getElementById('gistIdInput').value.trim();
+      if (!gistId) {
+        showToast('No Gist ID to copy yet');
+        return;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(gistId).then(() => {
+          showToast('Copied Gist ID to clipboard!');
+        }).catch(() => {
+          prompt('Copy Gist ID:', gistId);
+        });
+      } else {
+        prompt('Copy Gist ID:', gistId);
       }
     }
 
