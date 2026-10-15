@@ -1748,12 +1748,23 @@
       
       // Auto pull on app boot if provider configured
       if (appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
-        manualSyncGist('pull', true);
+        executeGistPull(true, false);
       } else if (appState.syncConfig.provider === 'firebase' && appState.syncConfig.firebaseUrl) {
         manualSyncFirebase('pull', true);
         connectFirebaseSSE();
       }
     }
+
+    window.addEventListener('hashchange', () => {
+      initSyncManager();
+    });
+
+    // Auto-pull when switching back into the app on phone
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && appState.syncConfig.provider === 'gist' && appState.syncConfig.gistToken && appState.syncConfig.gistId) {
+        executeGistPull(true, false);
+      }
+    });
 
     function updateSyncStatusUI(status, message) {
       const pill = document.getElementById('syncStatusPill');
@@ -1908,7 +1919,11 @@
       }
 
       const remoteState = JSON.parse(file.content);
-      if (remoteState && (!appState.lastUpdated || (remoteState.lastUpdated && remoteState.lastUpdated >= appState.lastUpdated))) {
+      const hasLocalMeals = Object.values(appState.logsByDate || {}).some(day => 
+        Object.values(day || {}).some(slot => Array.isArray(slot) && slot.length > 0)
+      );
+
+      if (remoteState && (force || !hasLocalMeals || !appState.lastUpdated || (remoteState.lastUpdated && remoteState.lastUpdated >= appState.lastUpdated))) {
         appState.targets = remoteState.targets || appState.targets;
         appState.customFoods = remoteState.customFoods || [];
         appState.logsByDate = remoteState.logsByDate || {};
@@ -1934,7 +1949,7 @@
           updateSyncStatusUI('synced');
           showToast('Pushed state to GitHub Gist ✓');
         } else {
-          await executeGistPull(silent);
+          await executeGistPull(silent, true);
         }
       } catch (err) {
         console.error('Manual Gist sync error:', err);
