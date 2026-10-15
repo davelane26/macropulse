@@ -1870,6 +1870,7 @@
         appState.syncConfig.gistId = data.id;
         document.getElementById('gistIdInput').value = data.id;
         updateGistLinkUI(data.id);
+        saveState(true);
       } else {
         // Update existing Gist via PATCH
         const res = await fetch(`https://api.github.com/gists/${gistId}`, {
@@ -2171,7 +2172,7 @@
       updateGistLinkUI(cfg.gistId);
     }
 
-    function saveSyncSettings() {
+    async function saveSyncSettings() {
       // Determine active provider tab
       let activeProvider = 'none';
       if (!document.getElementById('syncViewGist').classList.contains('hidden')) {
@@ -2180,10 +2181,13 @@
         activeProvider = 'firebase';
       }
 
+      const enteredToken = document.getElementById('gistTokenInput').value.trim();
+      const enteredGistId = document.getElementById('gistIdInput').value.trim();
+
       appState.syncConfig = {
         provider: activeProvider,
-        gistToken: document.getElementById('gistTokenInput').value.trim(),
-        gistId: document.getElementById('gistIdInput').value.trim(),
+        gistToken: enteredToken,
+        gistId: enteredGistId,
         firebaseUrl: sanitizeFirebaseUrl(document.getElementById('fbUrlInput').value),
         firebaseNode: document.getElementById('fbNodeInput').value.trim() || 'users/david/macropulse',
         firebaseAuth: document.getElementById('fbAuthInput').value.trim(),
@@ -2191,18 +2195,44 @@
       };
 
       saveState(true);
-      closeModal('syncModal');
-      showToast(`Cloud Sync updated to: ${activeProvider.toUpperCase()}`);
 
-      if (activeProvider === 'firebase') {
+      if (activeProvider === 'gist') {
+        if (!enteredToken) {
+          alert('Please enter your GitHub Personal Access Token to enable Gist Sync.');
+          return;
+        }
+
+        updateSyncStatusUI('syncing');
+
+        try {
+          if (!enteredGistId) {
+            // First time connecting! Automatically create the secret Gist by pushing
+            showToast('Creating secret Gist and uploading meals...');
+            await executeGistPush();
+            appState.syncConfig.lastSyncTimestamp = Date.now();
+            saveState(true);
+            updateSyncStatusUI('synced');
+            updateGistLinkUI(appState.syncConfig.gistId);
+            showToast('Cloud Sync Connected! Secret Gist created ✓');
+            // Keep the modal open so the user sees the generated Gist ID and QR code!
+            return;
+          } else {
+            // Existing Gist ID: pull latest
+            await executeGistPull(false, true);
+            appState.syncConfig.lastSyncTimestamp = Date.now();
+            saveState(true);
+            updateSyncStatusUI('synced');
+            updateGistLinkUI(enteredGistId);
+          }
+        } catch (err) {
+          console.error('Gist initial connection failed:', err);
+          updateSyncStatusUI('error');
+          alert('Gist Connection Error: ' + err.message);
+          return;
+        }
+      } else if (activeProvider === 'firebase') {
         connectFirebaseSSE();
         manualSyncFirebase('pull', true);
-      } else if (activeProvider === 'gist') {
-        if (firebaseEventSource) {
-          firebaseEventSource.close();
-          firebaseEventSource = null;
-        }
-        manualSyncGist('pull', true);
       } else {
         if (firebaseEventSource) {
           firebaseEventSource.close();
@@ -2210,6 +2240,9 @@
         }
         updateSyncStatusUI('idle');
       }
+
+      closeModal('syncModal');
+      showToast(`Cloud Sync updated to: ${activeProvider.toUpperCase()}`);
     }
 
     // --- CSV & JSON BACKUP ENGINES ---
